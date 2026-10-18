@@ -30,8 +30,9 @@ uses a shared three-second event budget after permission, and rejects results
 from changed tracks, paused playback or obsolete detection generations.
 
 Music metadata does **not** establish source codec or bit depth. Metadata-only
-recovery therefore displays unknown fields, changes only the sample rate, and
-keeps the existing output bit depth even if Bit Depth Switching is enabled.
+recovery therefore displays unknown fields and requests only the sample rate,
+not a bit-depth change, even if Bit Depth Switching is enabled. Drivers can
+reconfigure their own stream format; the Output row shows the actual readback.
 Fresh ALAC decoder data still provides the full rate/depth pair. No system
 logging privacy profile is required.
 

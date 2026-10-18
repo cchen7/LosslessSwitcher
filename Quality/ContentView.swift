@@ -19,7 +19,7 @@ struct ContentView: View {
             Text("Output: \(outputDevices.outputFormatDescription)")
                 .font(.system(size: 20, weight: .semibold))
             if outputDevices.sourceFormat?.origin == .musicMetadata {
-                Text("Rate from Music metadata; source codec and bit depth are unknown. Output bit depth is unchanged.")
+                Text("Rate from Music metadata; source codec and bit depth are unknown. No bit-depth change is requested.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
