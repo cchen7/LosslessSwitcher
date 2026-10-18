@@ -12,24 +12,17 @@ import SimplyCoreAudio
 struct ContentView: View {
     @EnvironmentObject var outputDevices: OutputDevices
     
-    private var sampleRateText: String? {
-        guard let currentSampleRate = outputDevices.currentSampleRate else { return nil }
-        if outputDevices.enableBitDepthDetection {
-            if let bitDepth = outputDevices.currentBitDepth {
-                return String(format: "%.1f kHz / %d bit", currentSampleRate, bitDepth)
-            } else {
-                return String(format: "%.1f kHz / ? bit", currentSampleRate)
-            }
-        } else {
-            return String(format: "%.1f kHz", currentSampleRate)
-        }
-    }
-    
     var body: some View {
         VStack {
-            if let text = sampleRateText {
-                Text(text)
-                    .font(.system(size: 23, weight: .semibold, design: .default))
+            Text("Source: \(outputDevices.sourceFormat?.description ?? "Not detected")")
+                .font(.system(size: 14.5, weight: .medium))
+            Text("Output: \(outputDevices.outputFormatDescription)")
+                .font(.system(size: 20, weight: .semibold))
+            if outputDevices.sourceFormat?.origin == .musicMetadata {
+                Text("Rate from Music metadata; source codec and bit depth are unknown. Output bit depth is unchanged.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let device = outputDevices.selectedOutputDevice ?? outputDevices.defaultOutputDevice {
                 Text(device.name)
@@ -41,8 +34,16 @@ struct ContentView: View {
                 Text(message)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let warning = outputDevices.sourceOutputWarning {
+                Text(warning)
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .frame(maxWidth: 340)
     }
 }
 
@@ -51,4 +52,3 @@ struct ContentView_Previews: PreviewProvider {
         ContentView()
     }
 }
-

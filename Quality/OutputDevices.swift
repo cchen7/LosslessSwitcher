@@ -26,18 +26,30 @@ class OutputDevices: ObservableObject {
     @Published var currentBitDepth: Int?
     @Published var enableBitDepthDetection = Defaults.shared.userPreferBitDepthDetection
     @Published private(set) var statusMessage: String? = "Waiting for Apple Music playback."
+    @Published private(set) var sourceFormat: SourceAudioFormat?
+    @Published private(set) var isMusicPlaying = false
+    @Published private(set) var isReadingMusic = false
 
     private let coreAudio = SimplyCoreAudio()
     private let processQueue = DispatchQueue(label: "sampleRateDetection", qos: .utility)
+    private let metadataQueue = DispatchQueue(label: "musicMetadata", qos: .utility)
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "LosslessSwitcher", category: "Audio")
     private var cancellables = Set<AnyCancellable>()
     private var playback = PlaybackState()
     private var currentTrack: MediaTrack?
-    private var detectedStat: CMPlayerStats?
+    private var metadataRequest: MetadataRecoveryRequest?
     private var detectionEvent: Date?
     private var detectionGeneration = 0
     private var previousSampleRate: Float64?
     private var previousBitDepth: Int?
+
+    var outputFormatDescription: String {
+        SourceAudioFormat.describe(sampleRate: currentSampleRate.map { $0 * 1000 }, bitDepth: currentBitDepth)
+    }
+
+    var sourceOutputWarning: String? {
+        sourceFormat?.outputWarning(sampleRate: currentSampleRate.map { $0 * 1000 }, bitDepth: currentBitDepth)
+    }
 
     init() {
         outputDevices = coreAudio.allOutputDevices
@@ -119,10 +131,19 @@ class OutputDevices: ObservableObject {
 
     func getDeviceSampleRate() {
         guard let device = selectedOutputDevice ?? defaultOutputDevice,
-              let sampleRate = device.nominalSampleRate else { return }
+              let sampleRate = device.nominalSampleRate, sampleRate.isFinite, sampleRate > 0 else {
+            currentSampleRate = nil
+            currentBitDepth = nil
+            previousSampleRate = nil
+            previousBitDepth = nil
+            reportError("Cannot read the current audio output format.")
+            return
+        }
         updateSampleRate(
             sampleRate,
-            bitDepth: device.streams(scope: .output)?.first?.physicalFormat.map { Int($0.mBitsPerChannel) }
+            bitDepth: device.streams(scope: .output)?.first?.physicalFormat.flatMap {
+                $0.mBitsPerChannel > 0 ? Int($0.mBitsPerChannel) : nil
+            }
         )
     }
 
@@ -130,8 +151,8 @@ class OutputDevices: ObservableObject {
         stopDetection()
         getDeviceSampleRate()
         guard playback.isPlaying else { return }
-        if let detectedStat {
-            apply(detectedStat)
+        if let sourceFormat {
+            apply(sourceFormat)
         } else if let detectionEvent {
             beginDetection(at: detectionEvent)
         }
@@ -140,7 +161,7 @@ class OutputDevices: ObservableObject {
     private func beginDetection(at event: Date) {
         stopDetection()
         detectionEvent = event
-        if detectedStat == nil {
+        if sourceFormat == nil {
             statusMessage = "Detecting Music's lossless format..."
         }
         let generation = detectionGeneration
@@ -159,11 +180,12 @@ class OutputDevices: ObservableObject {
                         DispatchQueue.main.async { [weak self] in
                             guard let self, self.detectionGeneration == generation else { return }
                             if let candidate {
-                                self.detectedStat = candidate
-                                self.apply(candidate)
-                            } else if index == delays.count - 1, self.detectedStat == nil {
-                                self.statusMessage = "No lossless format detected. Play another lossless track in Music."
+                                let format = SourceAudioFormat(decoder: candidate)
+                                self.sourceFormat = format
+                                self.apply(format)
+                            } else if index == delays.count - 1, self.sourceFormat == nil {
                                 self.logger.notice("No decoder format matched the playback event.")
+                                self.recoverFromMusic(allowAuthorizationPrompt: false)
                             }
                         }
                     } catch {
@@ -171,6 +193,9 @@ class OutputDevices: ObservableObject {
                         DispatchQueue.main.async { [weak self] in
                             guard let self, self.detectionGeneration == generation else { return }
                             self.reportError(message)
+                            if index == delays.count - 1, self.sourceFormat == nil {
+                                self.recoverFromMusic(allowAuthorizationPrompt: false)
+                            }
                         }
                     }
                 }
@@ -178,13 +203,64 @@ class OutputDevices: ObservableObject {
         }
     }
 
-    private func apply(_ stat: CMPlayerStats) {
+    func readCurrentTrackFromMusic() {
+        guard playback.isPlaying, currentTrack?.isMusicApp == true else {
+            reportError("Play a track in Music before reading its format.")
+            return
+        }
+        guard !isReadingMusic else { return }
+        stopDetection()
+        sourceFormat = nil
+        recoverFromMusic(allowAuthorizationPrompt: true)
+    }
+
+    private func recoverFromMusic(allowAuthorizationPrompt: Bool) {
+        guard !isReadingMusic, playback.isPlaying, let track = currentTrack, track.isMusicApp else { return }
+        let request = MetadataRecoveryRequest(generation: detectionGeneration, track: track.identity)
+        metadataRequest = request
+        isReadingMusic = true
+        statusMessage = allowAuthorizationPrompt ? "Waiting for Music access..." : "Reading the current Music track..."
+        metadataQueue.async { [weak self] in
+            let result = Result { try MusicMetadataReader.readCurrentTrack(allowAuthorizationPrompt: allowAuthorizationPrompt) }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.metadataRequest == request else { return }
+                self.metadataRequest = nil
+                self.isReadingMusic = false
+                guard self.detectionGeneration == request.generation,
+                      self.currentTrack?.identity == request.track, self.playback.isPlaying else {
+                    self.logger.debug("Discarded an obsolete Music metadata request.")
+                    if self.sourceFormat == nil, self.playback.isPlaying {
+                        self.statusMessage = "Playback changed while reading Music. Read the current track again."
+                    }
+                    return
+                }
+                if self.sourceFormat?.origin == .decoder { return }
+                switch result {
+                case .success(let snapshot):
+                    guard request.accepts(
+                        snapshot, generation: self.detectionGeneration,
+                        track: self.currentTrack?.identity, hasDecoderFormat: self.sourceFormat?.origin == .decoder
+                    ) else {
+                        self.reportError("Music's current track does not match the playback observation. Try again.")
+                        return
+                    }
+                    let format = SourceAudioFormat(metadata: snapshot)
+                    self.sourceFormat = format
+                    self.apply(format)
+                case .failure(let error):
+                    self.reportError(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func apply(_ format: SourceAudioFormat) {
         guard let device = selectedOutputDevice ?? defaultOutputDevice else {
             reportError("No audio output device is available.")
             return
         }
         guard let rate = RateSelection.sampleRate(
-            for: stat.sampleRate,
+            for: format.sampleRate,
             supported: device.nominalSampleRates ?? [],
             preferMultiples: Defaults.shared.userPreferSampleRateMultiples
         ) else {
@@ -192,10 +268,10 @@ class OutputDevices: ObservableObject {
             return
         }
 
-        if enableBitDepthDetection {
+        if enableBitDepthDetection, let sourceDepth = format.bitDepth {
             guard let stream = device.streams(scope: .output)?.first,
                   var format = RateSelection.physicalFormat(
-                    at: rate, bitDepth: stat.bitDepth, supported: stream.availablePhysicalFormats ?? []
+                    at: rate, bitDepth: sourceDepth, supported: stream.availablePhysicalFormats ?? []
                   ) else {
                 reportError("No matching physical format for \(device.name). Disable Bit Depth Switching.")
                 return
@@ -281,10 +357,11 @@ class OutputDevices: ObservableObject {
             timestamp: payload.timestampEpochMicros.map { Date(timeIntervalSince1970: $0 / 1_000_000) }
         )
         if currentTrack != track {
-            detectedStat = nil
+            sourceFormat = nil
             detectionEvent = nil
         }
         currentTrack = track.isMusicApp ? track : nil
+        isMusicPlaying = playback.isPlaying
 
         switch change {
         case .none:
@@ -294,8 +371,8 @@ class OutputDevices: ObservableObject {
             statusMessage = track.isMusicApp ? "Apple Music is paused." : "Waiting for Apple Music playback."
         case .resumed:
             beginDetection(at: observedAt)
-            if let detectedStat {
-                apply(detectedStat)
+            if let sourceFormat {
+                apply(sourceFormat)
             }
         case .trackChanged, .seeked:
             beginDetection(at: observedAt)

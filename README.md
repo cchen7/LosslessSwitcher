@@ -15,6 +15,38 @@ The opposite happens, when the next track happens to have a lower sample rate.
 
 This fork targets Apple Silicon Macs, including M4 Max, running macOS 27. It builds on upstream version 2.0 and [PR #225](https://github.com/vincentneo/LosslessSwitcher/pull/225), retaining the original author's attribution. It is a compatibility preview, not an official upstream release.
 
+### Current development milestone: 2.2.0
+
+The development branch adds separate **Source** and **Output** format readouts and
+recovery when the app starts during an already-playing Music stream. This is not
+the upstream v3 rewrite. The published 2.1.0 releases do not contain these changes.
+
+If no fresh decoder format is available, the app can read the current track's
+reported sample rate from Music. Automatic attempts never request new
+permissions. Choose **Read Current Track from Music...** in the menu to grant
+Music Automation access when needed; later startups can reuse that authorization.
+The request targets the already-running Music process, runs off the main thread,
+uses a shared three-second event budget after permission, and rejects results
+from changed tracks, paused playback or obsolete detection generations.
+
+Music metadata does **not** establish source codec or bit depth. Metadata-only
+recovery therefore displays unknown fields, changes only the sample rate, and
+keeps the existing output bit depth even if Bit Depth Switching is enabled.
+Fresh ALAC decoder data still provides the full rate/depth pair. No system
+logging privacy profile is required.
+
+The menu displays the actual hardware bit depth even when switching is disabled
+and warns when the detected source format is reduced at the output. This is
+format visibility, not a bit-perfect guarantee.
+
+Later backlog, outside this development milestone:
+
+- Real mixed-rate natural-queue coverage, physical USB reconnect and sleep/wake checks.
+- Local operation timing to investigate intermittent output-switch delays.
+- A privacy-preserving streaming log-source experiment and workload-matched performance comparison.
+- Redacted diagnostics export, login controls and an update entry.
+- Unsigned build/offline regression CI; signing credentials remain in the local Keychain.
+
 **兼容性改造说明（2026-10-18）：** 本版本由 cchen7 基于 Vincent Neo 和其他贡献者的原项目进行 macOS 27 / Apple Silicon 兼容性改造，不是原项目的官方发布，也不代表重新原创了整个应用。继续遵循 GPLv3，保留原作者与贡献者的署名和许可证。
 
 **欢迎测试与反馈：** 欢迎使用不同 Mac、macOS 版本和 DAC 进行测试，并到[本 fork 的 Issues](https://github.com/cchen7/LosslessSwitcher/issues) 提交问题。请附上应用版本、Mac 型号、macOS 版本及 build、DAC 型号、复现步骤、预期与实际采样率；分享日志或截图前请移除个人信息。已知限制见下文。
@@ -55,7 +87,7 @@ DEVELOPMENT_TEAM="TEAMID" \
 bash scripts/build-release.sh
 ```
 
-This enables Hardened Runtime and secure timestamps and signs the embedded framework before the app with the same identity, without `--deep` or additional release entitlements. The decoder-based detection and read-only scripting interface do not require Apple Events automation permission. Custom hooks that automate other applications may need a separately authorized automation context. The default ad-hoc local build disables Hardened Runtime for that app to avoid Team ID library-validation failures; it does not change any system security setting.
+This enables Hardened Runtime and secure timestamps and signs the embedded framework before the app with the same identity, without `--deep`. The 2.2.0 metadata recovery feature needs exactly one Apple Events Automation entitlement, with an explicit Music-access usage description; it does not request library-validation or debugging exceptions. Permission is prompted only by the explicit menu/script action. Earlier build 27 did not have this entitlement. The default ad-hoc local build disables Hardened Runtime for that app to avoid Team ID library-validation failures; it does not change any system security setting.
 
 For notarization, add `NOTARY_PROFILE="YOUR_EXISTING_PROFILE"` to the build command above, using an existing notarytool Keychain profile for the same Apple team. A team profile can be reused across apps; this script does not create one or request account passwords. It submits the ZIP with a 30-minute wait, requires an accepted result, staples and validates the ticket, checks Gatekeeper, and repackages the stapled app. Keep signing identities, team/profile values, private keys and account credentials out of the repository; supply local values through environment variables.
 
@@ -67,9 +99,9 @@ The tested streams automatically switched between 44.1, 96 and 192 kHz. Pause/re
 
 Device QA found and fixed a stale display when another application changed the hardware sample rate. `Tests/DeviceQA.swift` covers that regression on real hardware. One scripting-response timeout during output switching was not reproduced in four subsequent output-return checks; long-run stability is not established.
 
-Launching during an already-playing stream **still requires a new decoder event**, such as changing tracks, before automatic detection can succeed. Different-rate natural transitions, long-duration preloading, physical USB unplug/replug and bit-perfect output were not verified by these short tests.
+In the published 2.1.0 preview, launching during an already-playing stream requires a new decoder event. The 2.2.0 development candidate recovered a real 192 kHz stream on YULong without changing tracks when Music access was already authorized, and correctly left unknown source bit depth unfilled. Source/output differences, explicit mixed-rate track changes, resume and decoder-controlled 16/24-bit output were checked on the same DAC. Different-rate natural queue transitions, long-duration preloading, physical USB unplug/replug and bit-perfect output remain unverified.
 
-**Limits:** Music's decoder logs do not provide a reliable public track identifier. Selection within a -1.5/+2 second playback-event window is still a heuristic, not a guarantee of bit-perfect playback. A preloaded format inside that window can remain ambiguous. If Music emits no new decoder line, including when launching during an already-playing stream, the app leaves the device rate unchanged and shows a status message; play another lossless track to retry. External DACs, AirPlay and Bluetooth have their own supported-rate limits.
+**Limits:** Music's decoder logs do not provide a reliable public track identifier. Selection within a -1.5/+2 second playback-event window is still a heuristic, not a guarantee of bit-perfect playback. A preloaded format inside that window can remain ambiguous. Without a matching decoder event or an authorized, identity-matched Music metadata result, the app leaves the device rate unchanged and shows a status message. External DACs, AirPlay and Bluetooth have their own supported-rate limits.
 
 The installation notes and device reports below refer to the upstream releases.
 

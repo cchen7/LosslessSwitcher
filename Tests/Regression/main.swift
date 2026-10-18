@@ -103,3 +103,57 @@ precondition(observe("browser", music: false) == .stopped)
 precondition(!playback.isPlaying)
 precondition(observe("second", position: 2, at: 23) == .trackChanged)
 print("PASS: pause, resume, track changes and non-Music playback gate detection")
+
+let identity = TrackIdentity(title: "Current", artist: "Artist", album: "Album")
+let metadata = MusicTrackSnapshot(track: identity, sampleRate: 192000, isPlaying: true)
+let request = MetadataRecoveryRequest(generation: 7, track: identity)
+precondition(request.accepts(metadata, generation: 7, track: identity, hasDecoderFormat: false))
+precondition(!request.accepts(metadata, generation: 8, track: identity, hasDecoderFormat: false))
+precondition(!request.accepts(metadata, generation: 7, track: identity, hasDecoderFormat: true))
+precondition(!request.accepts(
+    MusicTrackSnapshot(track: identity, sampleRate: 192000, isPlaying: false),
+    generation: 7, track: identity, hasDecoderFormat: false
+))
+print("PASS: startup metadata is accepted only for active, current detection without a decoder result")
+
+let otherRecording = TrackIdentity(title: "Current", artist: "Another Artist", album: "Album")
+precondition(!request.accepts(
+    MusicTrackSnapshot(track: otherRecording, sampleRate: 96000, isPlaying: true),
+    generation: 7, track: identity, hasDecoderFormat: false
+))
+precondition(!request.accepts(metadata, generation: 7, track: otherRecording, hasDecoderFormat: false))
+precondition(!request.accepts(
+    MusicTrackSnapshot(track: identity, sampleRate: .nan, isPlaying: true),
+    generation: 7, track: identity, hasDecoderFormat: false
+))
+print("PASS: same-name recordings, changed tracks and invalid metadata cannot change the current format")
+
+let metadataFormat = SourceAudioFormat(metadata: metadata)
+precondition(metadataFormat.bitDepth == nil)
+precondition(metadataFormat.outputWarning(sampleRate: 192000, bitDepth: 16) == nil)
+let decodedFormat = SourceAudioFormat(decoder: stat(0, 96000))
+precondition(decodedFormat.outputWarning(sampleRate: 96000, bitDepth: 16) != nil)
+precondition(decodedFormat.outputWarning(sampleRate: 96000, bitDepth: 24) == nil)
+precondition(decodedFormat.outputWarning(sampleRate: 48000, bitDepth: 24) != nil)
+print("PASS: source/output reductions are visible without inventing metadata bit depth")
+
+var mixedPlayback = PlaybackState()
+for (index, rate) in [44100.0, 96000, 192000, 44100].enumerated() {
+    let trackID = "mixed-\(index)"
+    let time = event.addingTimeInterval(Double(index) * 30)
+    precondition(mixedPlayback.update(
+        trackID: trackID, isMusicApp: true, isPlaying: true,
+        elapsedTime: 0, timestamp: time
+    ) == .trackChanged)
+    let candidates = [
+        CMPlayerStats(sampleRate: 192000, bitDepth: 24, date: time.addingTimeInterval(-5), priority: 5),
+        CMPlayerStats(sampleRate: rate, bitDepth: 24, date: time, priority: 5),
+        CMPlayerStats(sampleRate: 96000, bitDepth: 24, date: time.addingTimeInterval(4), priority: 5)
+    ]
+    precondition(RateSelection.candidate(candidates, near: time)?.sampleRate == rate)
+    precondition(mixedPlayback.update(
+        trackID: trackID, isMusicApp: true, isPlaying: true,
+        elapsedTime: 0, timestamp: time
+    ) == .none)
+}
+print("PASS: mixed-rate transitions ignore old formats, late preloads and same-track metadata updates")

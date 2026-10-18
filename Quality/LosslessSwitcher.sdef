@@ -6,5 +6,20 @@
             <cocoa class="LosslessSwitcher.ScriptableApplicationCommand"/>
             <result type="integer" description="sample rate"/>
         </command>
+        <command name="get source sample rate" code="getlsrce" description="returns the detected source rate in Hz, or -1 when unknown">
+            <cocoa class="LosslessSwitcher.SourceSampleRateCommand"/>
+            <result type="integer" description="source sample rate"/>
+        </command>
+        <command name="get source bit depth" code="getlsbit" description="returns the source bit depth, or -1 when unavailable">
+            <cocoa class="LosslessSwitcher.SourceBitDepthCommand"/>
+            <result type="integer" description="source bit depth"/>
+        </command>
+        <command name="get output bit depth" code="getlobit" description="returns the hardware output bit depth, or -1 when unknown">
+            <cocoa class="LosslessSwitcher.OutputBitDepthCommand"/>
+            <result type="integer" description="output bit depth"/>
+        </command>
+        <command name="read current track from Music" code="getlrfrs" description="asynchronously reads the current Music rate and may request Automation permission; query the source rate after completion">
+            <cocoa class="LosslessSwitcher.ReadCurrentTrackCommand"/>
+        </command>
     </suite>
 </dictionary>

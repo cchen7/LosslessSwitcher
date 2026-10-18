@@ -17,5 +17,6 @@ xcrun swiftc -emit-module -emit-library -module-name Sweep "$sweep_source" \
 xcrun swiftc -I "$test_dir" -L "$test_dir" -lSweep \
     "$repo_root/Quality/CMPlayerStuff.swift" "$repo_root/Tests/Regression/main.swift" \
     "$repo_root/Quality/PlaybackState.swift" \
+    "$repo_root/Quality/SourceAudioFormat.swift" \
     -o "$test_dir/regression"
 DYLD_LIBRARY_PATH="$test_dir" "$test_dir/regression"

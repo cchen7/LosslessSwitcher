@@ -18,6 +18,10 @@ struct MediaTrack: Equatable, Hashable {
     let album: String?
     let artist: String?
     let trackNumber: String?
+
+    var identity: TrackIdentity {
+        TrackIdentity(title: title ?? "", artist: artist ?? "", album: album ?? "")
+    }
     
     init(mediaRemote info: [String : Any]) {
         self.id = info[kMRMediaRemoteNowPlayingInfoUniqueIdentifier] as? String

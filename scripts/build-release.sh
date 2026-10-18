@@ -30,7 +30,7 @@ xcodebuild -project Quality.xcodeproj -scheme LosslessSwitcher \
     -configuration Release -destination 'platform=macOS,arch=arm64' \
     -derivedDataPath .build -onlyUsePackageVersionsFromResolvedFile \
     ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGN_IDENTITY="$signing_identity" \
-    CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$development_team" CODE_SIGN_ENTITLEMENTS= \
+    CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$development_team" \
     ENABLE_HARDENED_RUNTIME="$hardened_runtime" \
     OTHER_CODE_SIGN_FLAGS="${timestamp_options[*]}" -quiet build
 
@@ -55,11 +55,12 @@ chmod -R u=rwX,go=rX "$app"
 codesign --force --sign "$signing_identity" --options "$signing_options" \
     "${timestamp_options[@]}" "$app/Contents/Frameworks/MediaRemoteAdapter.framework"
 codesign --force --sign "$signing_identity" --options "$signing_options" "${timestamp_options[@]}" \
-    "$app"
+    --entitlements Quality/Quality.entitlements "$app"
 codesign --verify --strict --verbose=2 "$app/Contents/Frameworks/MediaRemoteAdapter.framework"
 codesign --verify --strict --verbose=2 "$app"
 
-archive="$repo_root/dist/LosslessSwitcher-2.1.0-macos27-arm64.zip"
+version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
+archive="$repo_root/dist/LosslessSwitcher-$version-macos27-arm64.zip"
 ditto -c -k --keepParent "$app" "$archive"
 if [ -n "$notary_profile" ]; then
     report="$repo_root/dist/notarization.json"

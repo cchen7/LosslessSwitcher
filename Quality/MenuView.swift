@@ -17,6 +17,11 @@ struct MenuView: View {
             ContentView()
             
             Divider()
+
+            Button(outputDevices.isReadingMusic ? "Reading Music..." : "Read Current Track from Music...") {
+                outputDevices.readCurrentTrackFromMusic()
+            }
+            .disabled(!outputDevices.isMusicPlaying || outputDevices.isReadingMusic)
             
             Button {
                 defaults.userPreferIconStatusBarItem.toggle()
