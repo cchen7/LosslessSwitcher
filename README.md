@@ -51,6 +51,16 @@ This enables Hardened Runtime and secure timestamps and signs the embedded frame
 
 For optional notarization, first run `xcrun notarytool store-credentials LosslessSwitcherNotary` interactively on your Mac. Add `NOTARY_PROFILE="LosslessSwitcherNotary"` to the build command above. The script submits the ZIP, requires an accepted result, staples and validates the ticket, and repackages the app. Keep certificates, private keys and account credentials on your machine; do not put them in this repository.
 
+### Real-device QA
+
+On 2026-10-18, short device tests used an M4 Max, macOS 27.0.1 and a **YULONG Audio DSD DAC OT**, with actual Apple Music subscription streams. Music's track sample rate, ALAC decoder logs, CoreAudio hardware format and the running app's scripting readback were checked independently.
+
+The tested streams automatically switched between 44.1, 96 and 192 kHz. Pause/resume, seeks, a same-rate natural track transition, rapid next-track commands and return from the built-in output to a cached 192 kHz DAC format passed. With Bit Depth Switching enabled, 16-bit and 24-bit sources selected the corresponding physical DAC formats. With it disabled, the existing hardware bit depth is intentionally retained.
+
+Device QA found and fixed a stale display when another application changed the hardware sample rate. `Tests/DeviceQA.swift` covers that regression on real hardware. One scripting-response timeout during output switching was not reproduced in four subsequent output-return checks; long-run stability is not established.
+
+Launching during an already-playing stream **still requires a new decoder event**, such as changing tracks, before automatic detection can succeed. Different-rate natural transitions, long-duration preloading, physical USB unplug/replug and bit-perfect output were not verified by these short tests.
+
 **Limits:** Music's decoder logs do not provide a reliable public track identifier. Selection within a -1.5/+2 second playback-event window is still a heuristic, not a guarantee of bit-perfect playback. A preloaded format inside that window can remain ambiguous. If Music emits no new decoder line, including when launching during an already-playing stream, the app leaves the device rate unchanged and shows a status message; play another lossless track to retry. External DACs, AirPlay and Bluetooth have their own supported-rate limits.
 
 The installation notes and device reports below refer to the upstream releases.

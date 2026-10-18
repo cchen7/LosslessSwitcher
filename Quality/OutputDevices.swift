@@ -69,6 +69,28 @@ class OutputDevices: ObservableObject {
             }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: .deviceNominalSampleRateDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let self,
+                      let device = notification.object as? AudioDevice,
+                      device.id == (self.selectedOutputDevice ?? self.defaultOutputDevice)?.id else { return }
+                self.getDeviceSampleRate()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .streamPhysicalFormatDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let self,
+                      let stream = notification.object as? AudioStream,
+                      let device = self.selectedOutputDevice ?? self.defaultOutputDevice,
+                      device.streams(scope: .output)?
+                        .contains(where: { $0.id == stream.id }) == true else { return }
+                self.getDeviceSampleRate()
+            }
+            .store(in: &cancellables)
+
         Defaults.shared.$userPreferBitDepthDetection
             .dropFirst()
             .receive(on: DispatchQueue.main)
