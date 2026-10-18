@@ -13,13 +13,14 @@ The opposite happens, when the next track happens to have a lower sample rate.
 
 ## macOS 27 / Apple Silicon fork
 
-This fork targets Apple Silicon Macs, including M4 Max, running macOS 27. It builds on upstream version 2.0 and [PR #225](https://github.com/vincentneo/LosslessSwitcher/pull/225), retaining the original author's attribution. It is a compatibility preview, not an official upstream release.
+This fork targets Apple Silicon Macs, including M4 Max, running macOS 27. It builds on upstream version 2.0 and [vincentneo/LosslessSwitcher#225](https://github.com/vincentneo/LosslessSwitcher/pull/225), retaining the original author's attribution. It is a compatibility preview, not an official upstream release.
 
-### Current development milestone: 2.2.0
+### 2.2.0 beta: startup recovery and source/output visibility
 
-The development branch adds separate **Source** and **Output** format readouts and
-recovery when the app starts during an already-playing Music stream. This is not
-the upstream v3 rewrite. The published 2.1.0 releases do not contain these changes.
+[2.2.0 Beta 1](https://github.com/cchen7/LosslessSwitcher/releases/tag/v2.2.0-beta1)
+adds separate **Source** and **Output** format readouts and recovery when the app
+starts during an already-playing Music stream. This is not the upstream v3
+rewrite. The published 2.1.0 releases do not contain these changes.
 
 If no fresh decoder format is available, the app can read the current track's
 reported sample rate from Music. Automatic attempts never request new
@@ -40,7 +41,7 @@ The menu displays the actual hardware bit depth even when switching is disabled
 and warns when the detected source format is reduced at the output. This is
 format visibility, not a bit-perfect guarantee.
 
-Later backlog, outside this development milestone:
+Later backlog, outside this beta:
 
 - Real mixed-rate natural-queue coverage, physical USB reconnect and sleep/wake checks.
 - Local operation timing to investigate intermittent output-switch delays.
@@ -100,7 +101,7 @@ The tested streams automatically switched between 44.1, 96 and 192 kHz. Pause/re
 
 Device QA found and fixed a stale display when another application changed the hardware sample rate. `Tests/DeviceQA.swift` covers that regression on real hardware. One scripting-response timeout during output switching was not reproduced in four subsequent output-return checks; long-run stability is not established.
 
-In the published 2.1.0 preview, launching during an already-playing stream requires a new decoder event. The 2.2.0 development candidate recovered a real 192 kHz stream on YULong without changing tracks when Music access was already authorized, and correctly left unknown source bit depth unfilled. Source/output differences, explicit mixed-rate track changes, resume and decoder-controlled 16/24-bit output were checked on the same DAC. Different-rate natural queue transitions, long-duration preloading, physical USB unplug/replug and bit-perfect output remain unverified.
+In the published 2.1.0 preview, launching during an already-playing stream requires a new decoder event. The 2.2.0 implementation recovered a real 192 kHz stream on YULong without changing tracks when Music access was already authorized, and correctly left unknown source bit depth unfilled. Source/output differences, explicit mixed-rate track changes, resume and decoder-controlled 16/24-bit output were checked on the same DAC. Different-rate natural queue transitions, long-duration preloading, physical USB unplug/replug and bit-perfect output remain unverified.
 
 **Limits:** Music's decoder logs do not provide a reliable public track identifier. Selection within a -1.5/+2 second playback-event window is still a heuristic, not a guarantee of bit-perfect playback. A preloaded format inside that window can remain ambiguous. Without a matching decoder event or an authorized, identity-matched Music metadata result, the app leaves the device rate unchanged and shows a status message. External DACs, AirPlay and Bluetooth have their own supported-rate limits.
 
