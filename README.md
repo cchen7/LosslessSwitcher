@@ -15,6 +15,12 @@ The opposite happens, when the next track happens to have a lower sample rate.
 
 This fork targets Apple Silicon Macs, including M4 Max, running macOS 27. It builds on upstream version 2.0 and [PR #225](https://github.com/vincentneo/LosslessSwitcher/pull/225), retaining the original author's attribution. It is a compatibility preview, not an official upstream release.
 
+**兼容性改造说明（2026-10-18）：** 本版本由 cchen7 基于 Vincent Neo 和其他贡献者的原项目进行 macOS 27 / Apple Silicon 兼容性改造，不是原项目的官方发布，也不代表重新原创了整个应用。继续遵循 GPLv3，保留原作者与贡献者的署名和许可证。
+
+**欢迎测试与反馈：** 欢迎使用不同 Mac、macOS 版本和 DAC 进行测试，并到[本 fork 的 Issues](https://github.com/cchen7/LosslessSwitcher/issues) 提交问题。请附上应用版本、Mac 型号、macOS 版本及 build、DAC 型号、复现步骤、预期与实际采样率；分享日志或截图前请移除个人信息。已知限制见下文。
+
+**Compatibility work, not an official upstream release:** cchen7 maintains these macOS 27 / Apple Silicon compatibility changes; credit for the original application remains with Vincent Neo and the upstream contributors. Please test this preview and [report issues in this fork](https://github.com/cchen7/LosslessSwitcher/issues), including your app/macOS versions, Mac and DAC models, reproduction steps, and expected/actual sample rates. GPLv3 and upstream attribution are retained.
+
 - Uses one playback listener and one audio-device controller.
 - Detects formats at track changes, resume and actual seeks, rather than every metadata update. Repeated MediaRemote position timestamps do not count as seeks.
 - Rejects stale detection work and out-of-window preloads, restores the detected format on output-device changes, and displays the hardware's actual rate.
@@ -24,7 +30,9 @@ This fork targets Apple Silicon Macs, including M4 Max, running macOS 27. It bui
 
 Download the ARM64 ZIP from [this fork's releases](https://github.com/cchen7/LosslessSwitcher/releases), extract it, quit any other LosslessSwitcher instance, and drag `LosslessSwitcher.app` into Applications. Enable Lossless Audio in Music; disable Dolby Atmos when you want the lossless stereo stream. Bit Depth Switching is optional and is off by default.
 
-The downloadable preview is ad-hoc signed, **not Apple-notarized**. For a GitHub download, macOS may require **System Settings > Privacy & Security > Open Anyway** after the first launch attempt. Do not disable Gatekeeper or SIP. The fork uses its own bundle identifier, so configure its preferences and login item separately from the upstream app.
+Starting with **Preview 3 / build 27**, the downloadable app is signed with the maintainer's **Developer ID Application** certificate, with Hardened Runtime and a secure timestamp. It is **not Apple-notarized**; signing and notarization are separate steps. Earlier Preview 1 and 2 builds were ad-hoc signed.
+
+For a GitHub download, macOS may require **System Settings > Privacy & Security > Open Anyway** after the first launch attempt. Do not disable Gatekeeper or SIP. The fork uses its own bundle identifier, so configure its preferences and login item separately from the upstream app.
 
 ### Build from source
 
@@ -47,7 +55,7 @@ DEVELOPMENT_TEAM="TEAMID" \
 bash scripts/build-release.sh
 ```
 
-This enables Hardened Runtime and secure timestamps and signs the embedded framework and app with the same identity. The default ad-hoc preview disables Hardened Runtime locally to avoid Team ID library-validation failures; it does not change any system security setting.
+This enables Hardened Runtime and secure timestamps and signs the embedded framework and app with the same identity. The default ad-hoc local build disables Hardened Runtime for that app to avoid Team ID library-validation failures; it does not change any system security setting.
 
 For optional notarization, first run `xcrun notarytool store-credentials LosslessSwitcherNotary` interactively on your Mac. Add `NOTARY_PROFILE="LosslessSwitcherNotary"` to the build command above. The script submits the ZIP, requires an accepted result, staples and validates the ticket, and repackages the app. Keep certificates, private keys and account credentials on your machine; do not put them in this repository.
 
