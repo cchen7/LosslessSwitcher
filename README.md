@@ -55,9 +55,9 @@ DEVELOPMENT_TEAM="TEAMID" \
 bash scripts/build-release.sh
 ```
 
-This enables Hardened Runtime and secure timestamps and signs the embedded framework and app with the same identity. The default ad-hoc local build disables Hardened Runtime for that app to avoid Team ID library-validation failures; it does not change any system security setting.
+This enables Hardened Runtime and secure timestamps and signs the embedded framework before the app with the same identity, without `--deep` or additional release entitlements. The decoder-based detection and read-only scripting interface do not require Apple Events automation permission. Custom hooks that automate other applications may need a separately authorized automation context. The default ad-hoc local build disables Hardened Runtime for that app to avoid Team ID library-validation failures; it does not change any system security setting.
 
-For optional notarization, first run `xcrun notarytool store-credentials LosslessSwitcherNotary` interactively on your Mac. Add `NOTARY_PROFILE="LosslessSwitcherNotary"` to the build command above. The script submits the ZIP, requires an accepted result, staples and validates the ticket, and repackages the app. Keep certificates, private keys and account credentials on your machine; do not put them in this repository.
+For notarization, add `NOTARY_PROFILE="YOUR_EXISTING_PROFILE"` to the build command above, using an existing notarytool Keychain profile for the same Apple team. A team profile can be reused across apps; this script does not create one or request account passwords. It submits the ZIP with a 30-minute wait, requires an accepted result, staples and validates the ticket, checks Gatekeeper, and repackages the stapled app. Keep signing identities, team/profile values, private keys and account credentials out of the repository; supply local values through environment variables.
 
 ### Real-device QA
 
