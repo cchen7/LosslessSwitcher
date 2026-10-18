@@ -10,6 +10,8 @@
 		1221F3F9280F10A3003E8B77 /* SimplyCoreAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 1221F3F8280F10A3003E8B77 /* SimplyCoreAudio */; };
 		1221F3FB280F1EEF003E8B77 /* OutputDevices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1221F3FA280F1EEF003E8B77 /* OutputDevices.swift */; };
 		C72700010000000000000001 /* PlaybackState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72700010000000000000002 /* PlaybackState.swift */; };
+		C72800010000000000000001 /* SourceAudioFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72800010000000000000002 /* SourceAudioFormat.swift */; };
+		C72800010000000000000003 /* MusicMetadataReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72800010000000000000004 /* MusicMetadataReader.swift */; };
 		1234F508281E8372007EC9F5 /* PrivateMediaRemote in Frameworks */ = {isa = PBXBuildFile; productRef = 1234F507281E8372007EC9F5 /* PrivateMediaRemote */; };
 		1234F50A281E83D1007EC9F5 /* MediaRemote.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1234F509281E83D1007EC9F5 /* MediaRemote.framework */; };
 		1234F50E281E8F07007EC9F5 /* MediaTrack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1234F50D281E8F07007EC9F5 /* MediaTrack.swift */; };
@@ -53,6 +55,8 @@
 /* Begin PBXFileReference section */
 		1221F3FA280F1EEF003E8B77 /* OutputDevices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputDevices.swift; sourceTree = "<group>"; };
 		C72700010000000000000002 /* PlaybackState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackState.swift; sourceTree = "<group>"; };
+		C72800010000000000000002 /* SourceAudioFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceAudioFormat.swift; sourceTree = "<group>"; };
+		C72800010000000000000004 /* MusicMetadataReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicMetadataReader.swift; sourceTree = "<group>"; };
 		1234F509281E83D1007EC9F5 /* MediaRemote.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MediaRemote.framework; path = ../../../../../System/Library/PrivateFrameworks/MediaRemote.framework; sourceTree = "<group>"; };
 		1234F50D281E8F07007EC9F5 /* MediaTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaTrack.swift; sourceTree = "<group>"; };
 		1234F50F281E9520007EC9F5 /* MediaRemoteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaRemoteController.swift; sourceTree = "<group>"; };
@@ -136,6 +140,8 @@
 				1272AAAD280DC68A00FD72BA /* CMPlayerStuff.swift */,
 				1221F3FA280F1EEF003E8B77 /* OutputDevices.swift */,
 				C72700010000000000000002 /* PlaybackState.swift */,
+				C72800010000000000000002 /* SourceAudioFormat.swift */,
+				C72800010000000000000004 /* MusicMetadataReader.swift */,
 				1293436A28131591002E19A8 /* CurrentUser.swift */,
 				1254A79B2813FB9400241107 /* Defaults.swift */,
 				1234F50D281E8F07007EC9F5 /* MediaTrack.swift */,
@@ -251,6 +257,8 @@
 				BF342D822E0948730032F398 /* MenuView.swift in Sources */,
 				1221F3FB280F1EEF003E8B77 /* OutputDevices.swift in Sources */,
 				C72700010000000000000001 /* PlaybackState.swift in Sources */,
+				C72800010000000000000001 /* SourceAudioFormat.swift in Sources */,
+				C72800010000000000000003 /* MusicMetadataReader.swift in Sources */,
 				1272AAAE280DC68A00FD72BA /* CMPlayerStuff.swift in Sources */,
 				1272AAAC280DC5E900FD72BA /* Console.swift in Sources */,
 				1234F510281E9520007EC9F5 /* MediaRemoteController.swift in Sources */,
@@ -386,7 +394,7 @@
 				CODE_SIGN_ENTITLEMENTS = Quality/Quality.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_ASSET_PATHS = "\"Quality/Preview Content\"";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -395,14 +403,14 @@
 				INFOPLIST_FILE = Quality/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "This permission is required for local file sample rate detection.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Read the current Music track's sample rate when no fresh decoder log is available. Permission is requested only when you choose Read Current Track from Music.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "2022-2025 Vincent Neo";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 2.1.0;
+				MARKETING_VERSION = 2.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.cchen7.LosslessSwitcher";
 				PRODUCT_NAME = LosslessSwitcher;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -422,7 +430,7 @@
 				CODE_SIGN_ENTITLEMENTS = Quality/Quality.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_ASSET_PATHS = "\"Quality/Preview Content\"";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -431,14 +439,14 @@
 				INFOPLIST_FILE = Quality/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "This permission is required for local file sample rate detection.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Read the current Music track's sample rate when no fresh decoder log is available. Permission is requested only when you choose Read Current Track from Music.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "2022-2025 Vincent Neo";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 2.1.0;
+				MARKETING_VERSION = 2.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.cchen7.LosslessSwitcher";
 				PRODUCT_NAME = LosslessSwitcher;
 				SWIFT_EMIT_LOC_STRINGS = YES;
