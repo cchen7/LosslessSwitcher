@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreAudio
 import OSLog
 import Sweep
 
@@ -22,12 +23,44 @@ struct RateSelection {
     static func candidate(_ stats: [CMPlayerStats], near event: Date) -> CMPlayerStats? {
         stats.filter {
             let offset = $0.date.timeIntervalSince(event)
-            return offset >= -1.5 && offset <= 2.0 && $0.sampleRate > 0
+            return offset >= -1.5 && offset <= 2.0 &&
+                $0.sampleRate.isFinite && $0.sampleRate > 0 &&
+                (1...64).contains($0.bitDepth)
         }.min {
             let left = abs($0.date.timeIntervalSince(event))
             let right = abs($1.date.timeIntervalSince(event))
             return left == right ? $0.date < $1.date : left < right
         }
+    }
+
+    static func sampleRate(for source: Double, supported: [Double], preferMultiples: Bool) -> Double? {
+        guard source.isFinite, source > 0 else { return nil }
+        let rates = supported.filter { $0.isFinite && $0 > 0 }
+        guard let nearest = rates.min(by: { abs($0 - source) < abs($1 - source) }) else { return nil }
+        guard preferMultiples, nearest != source else { return nearest }
+        let base = source.truncatingRemainder(dividingBy: 44100) == 0 ? 44100.0 : 48000.0
+        return rates.filter {
+            $0 < source && $0.truncatingRemainder(dividingBy: base) == 0
+        }.max() ?? nearest
+    }
+
+    static func physicalFormat(
+        at sampleRate: Double,
+        bitDepth: Int,
+        supported: [AudioStreamRangedDescription]
+    ) -> AudioStreamBasicDescription? {
+        let match = supported.filter {
+            $0.mFormat.mFormatID == kAudioFormatLinearPCM &&
+                $0.mSampleRateRange.mMinimum <= sampleRate &&
+                sampleRate <= $0.mSampleRateRange.mMaximum &&
+                $0.mFormat.mBitsPerChannel > 0
+        }.min {
+            abs(Int($0.mFormat.mBitsPerChannel) - bitDepth) <
+                abs(Int($1.mFormat.mBitsPerChannel) - bitDepth)
+        }
+        guard var format = match?.mFormat else { return nil }
+        format.mSampleRate = sampleRate
+        return format
     }
 }
 
@@ -91,7 +124,8 @@ class CMPlayerParser {
                   let rateText = message.firstSubstring(between: "ch, ", and: " Hz"),
                   let depthText = message.firstSubstring(between: "from ", and: "-bit source"),
                   let rate = Double(String(rateText).trimmingCharacters(in: .whitespacesAndNewlines)),
-                  let depth = Int(String(depthText).trimmingCharacters(in: .whitespacesAndNewlines))
+                  let depth = Int(String(depthText).trimmingCharacters(in: .whitespacesAndNewlines)),
+                  rate.isFinite, rate > 0, (1...64).contains(depth)
             else { return nil }
             return CMPlayerStats(sampleRate: rate, bitDepth: depth, date: entry.date, priority: 5)
         }

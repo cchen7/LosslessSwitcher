@@ -11,6 +11,50 @@ Let's say if the next song that you are playing, is a Hi-Res Lossless track with
 
 The opposite happens, when the next track happens to have a lower sample rate. 
 
+## macOS 27 / Apple Silicon fork
+
+This fork targets Apple Silicon Macs, including M4 Max, running macOS 27. It builds on upstream version 2.0 and [PR #225](https://github.com/vincentneo/LosslessSwitcher/pull/225), retaining the original author's attribution. It is a compatibility preview, not an official upstream release.
+
+- Uses one playback listener and one audio-device controller.
+- Detects formats at track changes, resume and actual seeks, rather than every metadata update. Repeated MediaRemote position timestamps do not count as seeks.
+- Rejects stale detection work and out-of-window preloads, restores the detected format on output-device changes, and displays the hardware's actual rate.
+- Supports physical format rate ranges and remembers device selection and the bit-depth preference.
+
+### Install this fork
+
+Download the ARM64 ZIP from [this fork's releases](https://github.com/cchen7/LosslessSwitcher/releases), extract it, quit any other LosslessSwitcher instance, and drag `LosslessSwitcher.app` into Applications. Enable Lossless Audio in Music; disable Dolby Atmos when you want the lossless stereo stream. Bit Depth Switching is optional and is off by default.
+
+The downloadable preview is ad-hoc signed, **not Apple-notarized**. For a GitHub download, macOS may require **System Settings > Privacy & Security > Open Anyway** after the first launch attempt. Do not disable Gatekeeper or SIP. The fork uses its own bundle identifier, so configure its preferences and login item separately from the upstream app.
+
+### Build from source
+
+With Xcode selected:
+
+```sh
+bash scripts/build-release.sh
+bash Tests/Regression/run.sh
+```
+
+The application is in `.build/Build/Products/Release/LosslessSwitcher.app`; the installable ARM64 ZIP and SHA-256 checksum are in `dist/`. All dependencies use the committed package lockfile. Distribution includes the GPL license and dependency notices.
+
+### Sign with your own Apple Developer account
+
+Install your **Developer ID Application** certificate and private key in your local Keychain. Use `security find-identity -v -p codesigning` to find the certificate name, then build:
+
+```sh
+SIGNING_IDENTITY="Developer ID Application: YOUR NAME (TEAMID)" \
+DEVELOPMENT_TEAM="TEAMID" \
+bash scripts/build-release.sh
+```
+
+This enables Hardened Runtime and secure timestamps and signs the embedded framework and app with the same identity. The default ad-hoc preview disables Hardened Runtime locally to avoid Team ID library-validation failures; it does not change any system security setting.
+
+For optional notarization, first run `xcrun notarytool store-credentials LosslessSwitcherNotary` interactively on your Mac. Add `NOTARY_PROFILE="LosslessSwitcherNotary"` to the build command above. The script submits the ZIP, requires an accepted result, staples and validates the ticket, and repackages the app. Keep certificates, private keys and account credentials on your machine; do not put them in this repository.
+
+**Limits:** Music's decoder logs do not provide a reliable public track identifier. Selection within a -1.5/+2 second playback-event window is still a heuristic, not a guarantee of bit-perfect playback. A preloaded format inside that window can remain ambiguous. If Music emits no new decoder line, including when launching during an already-playing stream, the app leaves the device rate unchanged and shows a status message; play another lossless track to retry. External DACs, AirPlay and Bluetooth have their own supported-rate limits.
+
+The installation notes and device reports below refer to the upstream releases.
+
 ## Installation
 
 ### For macOS Big Sur 11.4 to macOS Sonoma 14.x

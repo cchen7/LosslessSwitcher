@@ -12,14 +12,19 @@ import SwiftUI
 class MenuBarController {
     static let shared = MenuBarController()
     @ObservationIgnored
-    var outputDevices: OutputDevices!
+    let outputDevices: OutputDevices
     
     @ObservationIgnored
-    private var mrController: MediaRemoteController!
+    private let mrController: MediaRemoteController
     
     init() {
         let outputDevices = OutputDevices()
         self.outputDevices = outputDevices
         self.mrController = MediaRemoteController(outputDevices: outputDevices)
+    }
+
+    func stop() {
+        outputDevices.stopDetection()
+        mrController.stopListening()
     }
 }

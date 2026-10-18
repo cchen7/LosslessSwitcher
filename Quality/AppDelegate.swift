@@ -17,7 +17,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     static private(set) var instance: AppDelegate! = nil
     var outputDevices: OutputDevices!
     private let defaults = Defaults.shared
-    private var mrController: MediaRemoteController!
     private var devicesMenu: NSMenu!
     
     var statusItem: NSStatusItem?
@@ -124,6 +123,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     }
     
+    func applicationWillTerminate(_ notification: Notification) {
+        MenuBarController.shared.stop()
+    }
+
     func handleDevicesMenu() {
         self.devicesMenu.removeAllItems()
         let autoItem = DeviceMenuItem(title: "Default Device", action: #selector(deviceSelection(_:)), keyEquivalent: "", device: nil)

@@ -6,155 +6,150 @@
 //
 
 import Combine
+import CoreAudio
 import Foundation
-import SimplyCoreAudio
-import CoreAudioTypes
 import MediaRemoteAdapter
+import OSLog
+import SimplyCoreAudio
 
 class OutputDevices: ObservableObject {
-    @Published var selectedOutputDevice: AudioDevice? // auto if nil
+    @Published var selectedOutputDevice: AudioDevice? {
+        didSet {
+            if oldValue?.id != selectedOutputDevice?.id {
+                outputDeviceDidChange()
+            }
+        }
+    }
     @Published var defaultOutputDevice: AudioDevice?
     @Published var outputDevices = [AudioDevice]()
     @Published var currentSampleRate: Float64?
     @Published var currentBitDepth: Int?
     @Published var enableBitDepthDetection = Defaults.shared.userPreferBitDepthDetection
-    
-    private var enableBitDepthDetectionCancellable: AnyCancellable?
-    
+    @Published private(set) var statusMessage: String? = "Waiting for Apple Music playback."
+
     private let coreAudio = SimplyCoreAudio()
-    
-    private var changesCancellable: AnyCancellable?
-    private var defaultChangesCancellable: AnyCancellable?
-    private var timerCancellable: AnyCancellable?
-    private var outputSelectionCancellable: AnyCancellable?
-    
-    private var consoleQueue = DispatchQueue(label: "consoleQueue", qos: .userInteractive)
-    
-    private var processQueue = DispatchQueue(label: "processQueue", qos: .userInitiated)
-    
+    private let processQueue = DispatchQueue(label: "sampleRateDetection", qos: .utility)
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "LosslessSwitcher", category: "Audio")
+    private var cancellables = Set<AnyCancellable>()
+    private var playback = PlaybackState()
+    private var currentTrack: MediaTrack?
+    private var detectedStat: CMPlayerStats?
+    private var detectionEvent: Date?
+    private var detectionGeneration = 0
     private var previousSampleRate: Float64?
     private var previousBitDepth: Int?
-    var trackAndSample = [MediaTrack : Float64]()
-    var trackAndBitDepth = [MediaTrack : Int]()
-    var previousTrack: MediaTrack?
-    var currentTrack: MediaTrack?
-    
-    private var detectionGeneration = 0
-    private var lastPlaybackPosition: Double?
-    private var lastPlaybackObservation: Date?
-    private var wasPlaying = false
-    var timerActive = false
-    var timerCalls = 0
-    
+
     init() {
-        self.outputDevices = self.coreAudio.allOutputDevices
-        self.defaultOutputDevice = self.coreAudio.defaultOutputDevice
-        self.getDeviceSampleRate()
-        
-        changesCancellable =
-            NotificationCenter.default.publisher(for: .deviceListChanged).sink(receiveValue: { _ in
+        outputDevices = coreAudio.allOutputDevices
+        defaultOutputDevice = coreAudio.defaultOutputDevice
+        selectedOutputDevice = Defaults.shared.selectedDeviceUID.flatMap { uid in
+            outputDevices.first { $0.uid == uid }
+        }
+        getDeviceSampleRate()
+
+        NotificationCenter.default.publisher(for: .deviceListChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
                 self.outputDevices = self.coreAudio.allOutputDevices
-            })
-        
-        defaultChangesCancellable =
-            NotificationCenter.default.publisher(for: .defaultOutputDeviceChanged).sink(receiveValue: { _ in
+                self.selectedOutputDevice = Defaults.shared.selectedDeviceUID.flatMap { uid in
+                    self.outputDevices.first { $0.uid == uid }
+                }
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .defaultOutputDeviceChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
                 self.defaultOutputDevice = self.coreAudio.defaultOutputDevice
-                self.getDeviceSampleRate()
-            })
-        
-        outputSelectionCancellable = $selectedOutputDevice.sink(receiveValue: { _ in
-            self.getDeviceSampleRate()
-        })
-        
-        enableBitDepthDetectionCancellable = Defaults.shared.$userPreferBitDepthDetection.sink(receiveValue: { newValue in
-            self.enableBitDepthDetection = newValue
-        })
+                if self.selectedOutputDevice == nil {
+                    self.outputDeviceDidChange()
+                }
+            }
+            .store(in: &cancellables)
 
-        
+        Defaults.shared.$userPreferBitDepthDetection
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.enableBitDepthDetection = newValue
+                self.outputDeviceDidChange()
+            }
+            .store(in: &cancellables)
+
+        Defaults.shared.$userPreferSampleRateMultiples
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.outputDeviceDidChange() }
+            .store(in: &cancellables)
     }
-    
-    deinit {
-        changesCancellable?.cancel()
-        defaultChangesCancellable?.cancel()
-        timerCancellable?.cancel()
-        enableBitDepthDetectionCancellable?.cancel()
-        //timer.upstream.connect().cancel()
+
+    func stopDetection() {
+        detectionGeneration += 1
     }
-    
+
+    func reportError(_ message: String) {
+        logger.error("\(message, privacy: .public)")
+        statusMessage = message
+    }
+
     func getDeviceSampleRate() {
-        let defaultDevice = self.selectedOutputDevice ?? self.defaultOutputDevice
-        guard let sampleRate = defaultDevice?.nominalSampleRate else { return }
-        self.updateSampleRate(sampleRate, bitDepth: nil)
+        guard let device = selectedOutputDevice ?? defaultOutputDevice,
+              let sampleRate = device.nominalSampleRate else { return }
+        updateSampleRate(
+            sampleRate,
+            bitDepth: device.streams(scope: .output)?.first?.physicalFormat.map { Int($0.mBitsPerChannel) }
+        )
     }
-    
-    func getSampleRateFromAppleScript() -> Double? {
-        let scriptContents = "tell application \"Music\" to get sample rate of current track"
-        var error: NSDictionary?
-        
-        if let script = NSAppleScript(source: scriptContents) {
-            let output = script.executeAndReturnError(&error).stringValue
-            
-            if let error = error {
-                print("[APPLESCRIPT] - \(error)")
-            }
-            guard let output = output else { return nil }
 
-            if output == "missing value" {
-                return nil
-            }
-            else {
-                return Double(output)
-            }
+    private func outputDeviceDidChange() {
+        stopDetection()
+        getDeviceSampleRate()
+        guard playback.isPlaying else { return }
+        if let detectedStat {
+            apply(detectedStat)
+        } else if let detectionEvent {
+            beginDetection(at: detectionEvent)
         }
-        
-        return nil
-    }
-    
-    func getAllStats() -> [CMPlayerStats] {
-        var allStats = [CMPlayerStats]()
-        
-        do {
-//            let musicLogs = try Console.getRecentEntries(type: .music)
-            let coreAudioLogs = try Console.getRecentEntries(type: .coreAudio)
-//            let coreMediaLogs = try Console.getRecentEntries(type: .coreMedia)
-            
-//            allStats.append(contentsOf: CMPlayerParser.parseMusicConsoleLogs(musicLogs))
-//            if enableBitDepthDetection {
-                allStats.append(contentsOf: CMPlayerParser.parseCoreAudioConsoleLogs(coreAudioLogs))
-//            }
-//            else {
-//                allStats.append(contentsOf: CMPlayerParser.parseCoreMediaConsoleLogs(coreMediaLogs))
-//            }
-
-//            allStats.sort(by: {$0.priority > $1.priority})
-            print("[getAllStats] \(allStats)")
-        }
-        catch {
-            print("[getAllStats, error] \(error)")
-        }
-        
-        return allStats
-    }
-    
-    // All device and track state is accessed on the main queue. Only log reads
-    // run in the background; generation tokens reject results from old tracks.
-    func switchLatestSampleRate() {
-        beginDetection(at: Date())
     }
 
     private func beginDetection(at event: Date) {
-        detectionGeneration += 1
+        stopDetection()
+        detectionEvent = event
+        if detectedStat == nil {
+            statusMessage = "Detecting Music's lossless format..."
+        }
         let generation = detectionGeneration
-        for delay in [0.35, 1.0, 2.0, 3.0] {
+        let delays = [0.35, 1.0, 2.0, 3.0]
+        for (index, delay) in delays.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self, self.detectionGeneration == generation else { return }
                 self.processQueue.async { [weak self] in
                     guard let self else { return }
-                    let stats = self.getAllStats()
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self, self.detectionGeneration == generation,
-                              let stat = RateSelection.candidate(stats, near: event) else { return }
-                        self.apply(stat)
+                    do {
+                        let entries = try Console.getRecentEntries(
+                            type: .coreAudio, since: event.addingTimeInterval(-1.5)
+                        )
+                        let stats = CMPlayerParser.parseCoreAudioConsoleLogs(entries)
+                        let candidate = RateSelection.candidate(stats, near: event)
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self, self.detectionGeneration == generation else { return }
+                            if let candidate {
+                                self.detectedStat = candidate
+                                self.apply(candidate)
+                            } else if index == delays.count - 1, self.detectedStat == nil {
+                                self.statusMessage = "No lossless format detected. Play another lossless track in Music."
+                                self.logger.notice("No decoder format matched the playback event.")
+                            }
+                        }
+                    } catch {
+                        let message = "Cannot read Music's audio logs: \(error.localizedDescription)"
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self, self.detectionGeneration == generation else { return }
+                            self.reportError(message)
+                        }
                     }
                 }
             }
@@ -162,111 +157,126 @@ class OutputDevices: ObservableObject {
     }
 
     private func apply(_ stat: CMPlayerStats) {
-        guard let device = selectedOutputDevice ?? defaultOutputDevice,
-              let supported = device.nominalSampleRates,
-              var rate = supported.min(by: { abs($0 - stat.sampleRate) < abs($1 - stat.sampleRate) })
-        else { return }
-        if Defaults.shared.userPreferSampleRateMultiples, rate != stat.sampleRate {
-            let sourceInt = Int(stat.sampleRate)
-            let baseRate = sourceInt % 44100 == 0 ? 44100 : 48000
-            let familyRates = supported.filter {
-                Int($0) % baseRate == 0 && $0 < stat.sampleRate
-            }
-            if let bestMatch = familyRates.max() { rate = bestMatch }
+        guard let device = selectedOutputDevice ?? defaultOutputDevice else {
+            reportError("No audio output device is available.")
+            return
         }
+        guard let rate = RateSelection.sampleRate(
+            for: stat.sampleRate,
+            supported: device.nominalSampleRates ?? [],
+            preferMultiples: Defaults.shared.userPreferSampleRateMultiples
+        ) else {
+            reportError("Cannot read supported sample rates for \(device.name).")
+            return
+        }
+
         if enableBitDepthDetection {
-            guard let formats = getFormats(bestStat: stat, device: device),
-                  let format = formats.filter({ $0.mSampleRate == rate }).min(by: {
-                      abs(Int($0.mBitsPerChannel) - stat.bitDepth) < abs(Int($1.mBitsPerChannel) - stat.bitDepth)
-                  }) else { return }
-            setFormats(device: device, format: format)
-        } else if device.nominalSampleRate != rate {
-            device.setNominalSampleRate(rate)
+            guard let stream = device.streams(scope: .output)?.first,
+                  var format = RateSelection.physicalFormat(
+                    at: rate, bitDepth: stat.bitDepth, supported: stream.availablePhysicalFormats ?? []
+                  ) else {
+                reportError("No matching physical format for \(device.name). Disable Bit Depth Switching.")
+                return
+            }
+            if stream.physicalFormat != format {
+                var address = AudioObjectPropertyAddress(
+                    mSelector: kAudioStreamPropertyPhysicalFormat,
+                    mScope: kAudioObjectPropertyScopeGlobal,
+                    mElement: kAudioObjectPropertyElementMain
+                )
+                let status = AudioObjectSetPropertyData(
+                    stream.id, &address, 0, nil,
+                    UInt32(MemoryLayout<AudioStreamBasicDescription>.size), &format
+                )
+                guard status == noErr else {
+                    reportError("Cannot set the audio format for \(device.name) (CoreAudio \(status)).")
+                    return
+                }
+            }
+        } else if device.nominalSampleRate != rate, !device.setNominalSampleRate(rate) {
+            reportError("Cannot set \(device.name) to \(Int(rate)) Hz.")
+            return
         }
-        // Display the hardware readback, not the requested rate.
-        if let actualRate = device.nominalSampleRate {
-            updateSampleRate(actualRate, bitDepth: device.streams(scope: .output)?.first?.physicalFormat.map { Int($0.mBitsPerChannel) })
+        readBack(device: device, expectedRate: rate, generation: detectionGeneration)
+    }
+
+    private func readBack(device: AudioDevice, expectedRate: Double, generation: Int, attempt: Int = 0) {
+        guard detectionGeneration == generation,
+              (selectedOutputDevice ?? defaultOutputDevice)?.id == device.id else { return }
+        getDeviceSampleRate()
+        if device.nominalSampleRate == expectedRate {
+            statusMessage = nil
+        } else if attempt < 3 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                self?.readBack(device: device, expectedRate: expectedRate, generation: generation, attempt: attempt + 1)
+            }
+        } else {
+            reportError("\(device.name) did not accept \(Int(expectedRate)) Hz. The displayed rate is the hardware readback.")
         }
     }
 
-    func getFormats(bestStat: CMPlayerStats, device: AudioDevice) -> [AudioStreamBasicDescription]? {
-        // new sample rate + bit depth detection route
-        let streams = device.streams(scope: .output)
-        let availableFormats = streams?.first?.availablePhysicalFormats?.compactMap({$0.mFormat})
-        return availableFormats
-    }
-    
-    func setFormats(device: AudioDevice?, format: AudioStreamBasicDescription?) {
-        guard let device, let format else { return }
-        let streams = device.streams(scope: .output)
-        if streams?.first?.physicalFormat != format {
-            streams?.first?.physicalFormat = format
-        }
-    }
-    
     func updateSampleRate(_ sampleRate: Float64, bitDepth: Int?) {
-        self.previousSampleRate = sampleRate
-        self.previousBitDepth = bitDepth
-        DispatchQueue.main.async { [self] in
-            let readableSampleRate = sampleRate / 1000
-            self.currentSampleRate = readableSampleRate
-            self.currentBitDepth = bitDepth
-            
-            let delegate = AppDelegate.instance
-            
-            if enableBitDepthDetection {
-                if let bitDepth = bitDepth {
-                    delegate?.statusItemTitle = String(format: "%.1f kHz / %d bit", readableSampleRate, bitDepth)
-                } else {
-                    delegate?.statusItemTitle = String(format: "%.1f kHz / ? bit", readableSampleRate)
-                }
-            } else {
-                delegate?.statusItemTitle = String(format: "%.1f kHz", readableSampleRate)
-            }
+        let changed = previousSampleRate != sampleRate ||
+            (enableBitDepthDetection && previousBitDepth != bitDepth)
+        previousSampleRate = sampleRate
+        previousBitDepth = bitDepth
+        currentSampleRate = sampleRate / 1000
+        currentBitDepth = bitDepth
+        if enableBitDepthDetection, let bitDepth {
+            AppDelegate.instance?.statusItemTitle = String(format: "%.1f kHz / %d bit", sampleRate / 1000, bitDepth)
+        } else {
+            AppDelegate.instance?.statusItemTitle = String(format: "%.1f kHz", sampleRate / 1000)
         }
-        self.runUserScript(sampleRate, bitDepth: bitDepth)
+        if changed {
+            runUserScript(sampleRate, bitDepth: bitDepth)
+        }
     }
-    
-    func runUserScript(_ sampleRate: Float64, bitDepth: Int?) {
+
+    private func runUserScript(_ sampleRate: Float64, bitDepth: Int?) {
         guard let scriptPath = Defaults.shared.shellScriptPath else { return }
-        let argumentSampleRate = String(Int(sampleRate))
-        var arguments = [argumentSampleRate]
-        
-        // Add bit depth as second argument if available
-        if let bitDepth = bitDepth {
+        var arguments = [String(Int(sampleRate))]
+        if let bitDepth {
             arguments.append(String(bitDepth))
         }
-        
-        Task.detached {
-            let scriptURL = URL(fileURLWithPath: scriptPath)
+        Task { @MainActor in
             do {
-                let task = try NSUserUnixTask(url: scriptURL)
+                let task = try NSUserUnixTask(url: URL(fileURLWithPath: scriptPath))
                 try await task.execute(withArguments: arguments)
-            }
-            catch {
-                print("TASK ERR \(error)")
+            } catch {
+                self.reportError("Cannot run the selected script: \(error.localizedDescription)")
             }
         }
     }
-    
+
     func trackDidChange(_ newTrack: TrackInfo, observedAt: Date) {
         let track = MediaTrack(trackInfo: newTrack)
-        guard track.isMusicApp, newTrack.payload.isPlaying == true else {
-            detectionGeneration += 1
-            wasPlaying = false
-            return
+        let payload = newTrack.payload
+        let change = playback.update(
+            trackID: track.id ?? "",
+            isMusicApp: track.isMusicApp,
+            isPlaying: payload.isPlaying,
+            elapsedTime: payload.elapsedTimeMicros.map { $0 / 1_000_000 },
+            timestamp: payload.timestampEpochMicros.map { Date(timeIntervalSince1970: $0 / 1_000_000) }
+        )
+        if currentTrack != track {
+            detectedStat = nil
+            detectionEvent = nil
         }
-        let position = newTrack.payload.elapsedTimeMicros.map { $0 / 1_000_000 }
-        var didSeek = false
-        if let position, let previous = lastPlaybackPosition, let date = lastPlaybackObservation {
-            didSeek = abs(position - previous - observedAt.timeIntervalSince(date)) > 1.0
+        currentTrack = track.isMusicApp ? track : nil
+
+        switch change {
+        case .none:
+            break
+        case .stopped:
+            stopDetection()
+            statusMessage = track.isMusicApp ? "Apple Music is paused." : "Waiting for Apple Music playback."
+        case .resumed:
+            beginDetection(at: observedAt)
+            if let detectedStat {
+                apply(detectedStat)
+            }
+        case .trackChanged, .seeked:
+            beginDetection(at: observedAt)
         }
-        let shouldDetect = track != currentTrack || !wasPlaying || didSeek
-        previousTrack = currentTrack
-        currentTrack = track
-        lastPlaybackPosition = position
-        lastPlaybackObservation = observedAt
-        wasPlaying = true
-        if shouldDetect { beginDetection(at: observedAt) }
     }
 }

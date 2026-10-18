@@ -37,6 +37,11 @@ struct ContentView: View {
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
             }
+            if let message = outputDevices.statusMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 }
@@ -46,5 +51,4 @@ struct ContentView_Previews: PreviewProvider {
         ContentView()
     }
 }
-
 

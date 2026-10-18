@@ -1,5 +1,5 @@
 # Decoder selection regression tests
 
-Run `bash Tests/Regression/run.sh /path/to/Sweep/Sources/Sweep/Sweep.swift` on macOS with Xcode selected. Use the Sweep checkout resolved by the existing Xcode project. The runner builds the production parser and selection policy, uses a temporary directory, and does not change audio devices or play music.
+Run `bash Tests/Regression/run.sh` after building the Xcode project with `bash scripts/build-release.sh`. An optional argument specifies another resolved `Sweep.swift` path. The runner builds the production parser, format selection and playback state, uses a temporary directory, and does not change audio devices or play music.
 
-Covers stale logs, late preloads, log ordering, delayed decoder lines, missing/invalid data, deterministic ties, independent per-line parsing, and multiple candidate selection. These tests do not verify real Music event timing or hardware switching. The transition window remains a heuristic because decoder logs have no reliable public track identifier.
+Covers stale logs, late preloads, ordering, delayed decoder lines, malformed formats, sample-rate-family fallback, physical format ranges, repeated metadata, stale position timestamps, seeks, pause/resume and other media applications. These tests do not verify real Music event timing or hardware switching. The transition window remains a heuristic because decoder logs have no reliable public track identifier.
