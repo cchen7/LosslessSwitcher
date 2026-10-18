@@ -30,7 +30,7 @@ This fork targets Apple Silicon Macs, including M4 Max, running macOS 27. It bui
 
 Download the ARM64 ZIP from [this fork's releases](https://github.com/cchen7/LosslessSwitcher/releases), extract it, quit any other LosslessSwitcher instance, and drag `LosslessSwitcher.app` into Applications. Enable Lossless Audio in Music; disable Dolby Atmos when you want the lossless stereo stream. Bit Depth Switching is optional and is off by default.
 
-Starting with **Preview 3 / build 27**, the downloadable app is signed with the maintainer's **Developer ID Application** certificate, with Hardened Runtime and a secure timestamp. It is **not Apple-notarized**; signing and notarization are separate steps. Earlier Preview 1 and 2 builds were ad-hoc signed.
+Starting with **Preview 3 / build 27**, the app is signed with the maintainer's **Developer ID Application** certificate, with Hardened Runtime and a secure timestamp. Check the individual release page for its **Apple notarization status**; signing and notarization are separate steps. Earlier Preview 1 and 2 builds were ad-hoc signed.
 
 For a GitHub download, macOS may require **System Settings > Privacy & Security > Open Anyway** after the first launch attempt. Do not disable Gatekeeper or SIP. The fork uses its own bundle identifier, so configure its preferences and login item separately from the upstream app.
 
